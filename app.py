@@ -26,9 +26,9 @@ def main():
     if "admin_autenticado" not in st.session_state:
         st.session_state.admin_autenticado = False
 
-    # --- BARRA LATERAL CON LOGOTIPO ---
+    # --- BARRA LATERAL CON LOGOTIPO (Corregido a use_container_width) ---
     if os.path.exists("rosasaron.png"):
-        st.sidebar.image("rosasaron.png", use_column_width=True)
+        st.sidebar.image("rosasaron.png", use_container_width=True)
     
     st.sidebar.markdown("### ⚙️ Panel de Control")
     modo = st.sidebar.radio("Navegación", ["Dashboard Gerencial", "Admin: Carga de Datos"])
@@ -155,10 +155,8 @@ def main():
                 with col_right:
                     st.subheader(f"🔍 Detalle por Transacción ({mes_seleccionado})")
                     if 'Número' in df_mes.columns:
-                        # Crear un diccionario o mapeo para mostrar el total en cada DTE del selector
                         dte_totales = df_mes.groupby('Número')['Total Facturado'].sum()
                         
-                        # Función para formatear las opciones del selectbox con su valor total
                         def formatear_dte(dte):
                             total_dte = dte_totales.get(dte, 0)
                             return f"Doc: {dte} — Total: ${total_dte:,.2f}"
