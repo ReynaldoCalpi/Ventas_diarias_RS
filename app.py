@@ -2,44 +2,28 @@ import streamlit as st
 import pandas as pd
 import pdfplumber
 
-# Configuración inicial de la página
 st.set_page_config(
     page_title="Control Diario de Ventas",
     page_icon="📊",
     layout="wide"
 )
 
-def extraer_datos_pdf(archivo_pdf):
-    """Extrae tablas de un PDF, limpia nulos y formatea como texto seguro para la UI."""
+def extraer_texto_pdf(archivo_pdf):
+    """Extrae todo el texto línea por línea para analizar la estructura real del reporte fiscal."""
+    texto_completo = []
     try:
         with pdfplumber.open(archivo_pdf) as pdf:
-            datos = []
-            for pagina in pdf.pages:
-                tabla = pagina.extract_table()
-                if tabla:
-                    datos.extend(tabla)
-        
-        if not datos:
-            return None
-        
-        # Crear DataFrame usando la primera fila como cabecera si es coherente, 
-        # o construirlo de forma tabular estándar
-        df = pd.DataFrame(datos[1:], columns=datos[0])
-        
-        # Limpieza estricta: rellenar nulos y convertir todo el DataFrame a string 
-        # para evitar por completo problemas de serialización JSON en st.dataframe
-        df = df.fillna("").astype(str)
-        # Reemplazar strings literales de "nan" o "None" por vacíos
-        df = df.replace(to_replace=["nan", "None", "NoneType"], value="")
-        
-        return df
+            for i, pagina in enumerate(pdf.pages):
+                texto = pagina.extract_text()
+                if texto:
+                    texto_completo.append(f"--- PÁGINA {i+1} ---\n" + texto)
+        return "\n".join(texto_completo)
     except Exception as e:
-        st.error(f"Error procesando el PDF: {e}")
-        return None
+        return f"Error leyendo el PDF: {e}"
 
 def main():
     st.title("📈 Control Diario de Ventas - Supermercado")
-    st.markdown("Panel gerencial para la lectura de Libros de Ventas (Consumidor Final y Créditos Fiscales).")
+    st.markdown("Panel gerencial para la lectura de Libros de Ventas.")
     st.divider()
 
     col1, col2 = st.columns(2)
@@ -54,27 +38,34 @@ def main():
 
     st.divider()
 
-    # Procesamiento del archivo de Consumidor Final
     if pdf_cf:
-        st.info("Procesando Consumidor Final...")
-        df_cf = extraer_datos_pdf(pdf_cf)
-        if df_cf is not None and not df_cf.empty:
-            st.success("¡Archivo procesado exitosamente!")
-            st.write("Vista previa de datos extraídos:")
-            st.dataframe(df_cf, use_container_width=True)
-        else:
-            st.warning("No se pudieron extraer tablas válidas del archivo de Consumidor Final.")
+        st.info("Analizando estructura del PDF de Consumidor Final...")
+        
+        # 1. Intentar extracción por tabla tradicional
+        df_tabla = None
+        try:
+            with pdfplumber.open(pdf_cf) as pdf:
+                tablas = []
+                for pagina in pdf.pages:
+                    t = pagina.extract_table()
+                    if t:
+                        tablas.extend(t)
+                if tablas:
+                    df_tabla = pd.DataFrame(tablas[1:], columns=tablas[0]).fillna("").astype(str)
+        except Exception:
+            pass
 
-    # Procesamiento del archivo de Crédito Fiscal
-    if pdf_ccf:
-        st.info("Procesando Créditos Fiscales...")
-        df_ccf = extraer_datos_pdf(pdf_ccf)
-        if df_ccf is not None and not df_ccf.empty:
-            st.success("¡Archivo procesado exitosamente!")
-            st.write("Vista previa de datos extraídos:")
-            st.dataframe(df_ccf, use_container_width=True)
+        if df_tabla is not None and not df_tabla.empty:
+            st.success("¡Tabla detectada automáticamente!")
+            st.dataframe(df_tabla, use_container_width=True)
         else:
-            st.warning("No se pudieron extraer tablas válidas del archivo de Créditos Fiscales.")
+            st.warning("⚠️ El PDF no tiene una estructura de tabla formal legible por coordenadas. Mostrando modo diagnóstico de texto:")
+            
+            # Mostrar texto bruto para entender cómo viene estructurado el reporte fiscal
+            texto_bruto = extraer_texto_pdf(pdf_cf)
+            st.text_area("Texto extraído del PDF (Copia un fragmento si necesitas ayuda para adaptarlo):", texto_bruto, height=300)
+            
+            st.info("💡 **Recomendación de Arquitectura:** Si este reporte no se deja leer como tabla, lo ideal será habilitar también la opción de subir archivos en formato **Excel (.xlsx)** si tu sistema contable te lo permite exportar directamente.")
 
 if __name__ == "__main__":
     main()
