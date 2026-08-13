@@ -5,12 +5,12 @@ import os
 
 st.set_page_config(page_title="Dashboard RI Consultores", layout="wide", page_icon="📊")
 
-# Inicialización segura de la carpeta de datos
+# Inicialización de la carpeta de almacenamiento persistente
 if not os.path.exists('data'):
     os.makedirs('data')
 
 def cargar_historico():
-    """Carga y concatena todos los archivos CSV guardados en la carpeta /data."""
+    """Carga y concatena todos los archivos mensuales guardados en la carpeta /data."""
     archivos = [f for f in os.listdir('data') if f.endswith('.csv')]
     if not archivos:
         return pd.DataFrame()
@@ -18,7 +18,6 @@ def cargar_historico():
     dfs = []
     for f in archivos:
         df_temp = pd.read_csv(f'data/{f}')
-        # Asegurar que si falta la columna 'Mes', se extraiga del nombre del archivo
         if 'Mes' not in df_temp.columns:
             df_temp['Mes'] = f.replace('.csv', '')
         dfs.append(df_temp)
@@ -26,15 +25,15 @@ def cargar_historico():
     return pd.concat(dfs, ignore_index=True)
 
 def main():
-    # Menú lateral para segmentar el panel del Administrador y la vista del Dueño
+    # Menú lateral de navegación (Oculto o reservado para ti, el Admin)
     st.sidebar.markdown("### ⚙️ Panel de Control")
     modo = st.sidebar.radio("Navegación", ["Dashboard Gerencial", "Admin: Carga de Datos"])
 
     if modo == "Admin: Carga de Datos":
         st.sidebar.markdown("---")
         st.sidebar.header("🔑 Carga de Histórico Mensual")
-        file_move = st.file_uploader("Entrada de Diario (move.xlsx)", type=["xlsx"])
-        file_line = st.file_uploader("Líneas de Diario (line.xlsx)", type=["xlsx"])
+        file_move = st.sidebar.file_uploader("Entrada de Diario (move.xlsx)", type=["xlsx"])
+        file_line = st.sidebar.file_uploader("Líneas de Diario (line.xlsx)", type=["xlsx"])
         mes_archivo = st.text_input("Identificador del Mes (Ej: Agosto_2026)", value="Agosto_2026")
         
         if st.button("Procesar y Guardar en Historial"):
@@ -45,11 +44,9 @@ def main():
                     
                     # Merge con la columna real de Odoo ('Número')
                     df = pd.merge(line, move, on='Número', suffixes=('_line', '_move'))
-                    
-                    # Inyectar columna de mes explícitamente
                     df['Mes'] = mes_archivo
                     
-                    # Guardar archivo persistente
+                    # Guardar en persistencia local
                     ruta_archivo = f'data/{mes_archivo}.csv'
                     df.to_csv(ruta_archivo, index=False)
                     st.sidebar.success(f"¡Datos de {mes_archivo} guardados correctamente!")
@@ -59,8 +56,9 @@ def main():
                 st.sidebar.warning("Por favor, suba ambos archivos y asigne un nombre al mes.")
 
     else:
+        # VISTA PRINCIPAL DEL DUEÑO (Gerencial, limpia y detallada)
         st.title("📊 Dashboard Gerencial - RI Consultores")
-        st.markdown("Visualización ejecutiva de ventas y comparativa histórica.")
+        st.markdown("Control ejecutivo de ventas, inventarios y análisis por producto.")
         st.divider()
 
         df_hist = cargar_historico()
@@ -68,15 +66,14 @@ def main():
         if df_hist.empty:
             st.warning("⚠️ No hay datos históricos en la base de datos local. Utiliza la opción **Admin: Carga de Datos** en la barra lateral para registrar el primer mes.")
         else:
-            # Validar columnas necesarias
             if 'Total Facturado' in df_hist.columns and 'Mes' in df_hist.columns:
                 
                 # KPIs Generales
                 total_venta_global = df_hist['Total Facturado'].sum()
                 col1, col2, col3 = st.columns(3)
                 col1.metric("💰 Venta Total Histórica", f"${total_venta_global:,.2f}")
-                col2.metric("📄 Transacciones Registradas", len(df_hist['Número'].unique()) if 'Número' in df_hist.columns else len(df_hist))
-                col3.metric("📅 Meses Analizados", len(df_hist['Mes'].unique()))
+                col2.metric("📄 Transacciones Únicas", len(df_hist['Número'].unique()) if 'Número' in df_hist.columns else len(df_hist))
+                col3.metric("📅 Meses Registrados", len(df_hist['Mes'].unique()))
 
                 st.divider()
 
@@ -95,16 +92,36 @@ def main():
                 fig.update_layout(showlegend=False)
                 st.plotly_chart(fig, use_container_width=True)
 
-                # Top Productos Global / por Mes
-                if 'Product' in df_hist.columns:
-                    st.subheader("🏆 Productos Top del Periodo")
-                    top_productos = df_hist.groupby('Product')['Total Facturado'].sum().sort_values(ascending=False).head(10)
-                    fig_top = px.bar(top_productos, orientation='h', color=top_productos.values,
-                                     labels={'value': 'Monto ($)', 'Product': 'Producto'})
-                    fig_top.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False)
-                    st.plotly_chart(fig_top, use_container_width=True)
+                st.divider()
+
+                # --- SECCIÓN RECUPERADA: PRODUCTOS TOP Y DETALLE POR DOCUMENTO ---
+                col_left, col_right = st.columns(2)
+
+                with col_left:
+                    if 'Product' in df_hist.columns:
+                        st.subheader("🏆 Top 10 Productos Más Vendidos")
+                        top_productos = df_hist.groupby('Product')['Total Facturado'].sum().sort_values(ascending=False).head(10)
+                        fig_top = px.bar(
+                            top_productos, 
+                            orientation='h', 
+                            color=top_productos.values,
+                            labels={'value': 'Monto Total ($)', 'Product': 'Producto'}
+                        )
+                        fig_top.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False)
+                        st.plotly_chart(fig_top, use_container_width=True)
+
+                with col_right:
+                    st.subheader("🔍 Detalle por Transacción (DTE)")
+                    if 'Número' in df_hist.columns:
+                        dte_lista = df_hist['Número'].unique()
+                        dte_seleccionado = st.selectbox("Selecciona un documento de venta:", dte_lista)
+                        
+                        if dte_seleccionado:
+                            detalle = df_hist[df_hist['Número'] == dte_seleccionado]
+                            cols_a_mostrar = [c for c in ['Product', 'Cantidad Facturada', 'Precio Facturado', 'Total Facturado', 'Fecha de factura'] if c in detalle.columns]
+                            st.dataframe(detalle[cols_a_mostrar], use_container_width=True)
             else:
-                st.error("Los archivos cargados no contienen las columnas requeridas ('Total Facturado' o 'Mes').")
+                st.error("Los datos cargados no contienen las columnas requeridas para el análisis.")
 
 if __name__ == "__main__":
     main()
