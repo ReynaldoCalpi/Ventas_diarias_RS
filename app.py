@@ -1,62 +1,47 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import os
 
-st.set_page_config(
-    page_title="Control de Ventas - RI Consultores",
-    page_icon="📊",
-    layout="wide"
-)
+st.set_page_config(page_title="Dashboard RI Consultores", layout="wide")
+
+# Inicialización de carpeta de datos
+if not os.path.exists('data'):
+    os.makedirs('data')
+
+def cargar_historico():
+    """Combina todos los archivos procesados en la carpeta /data."""
+    archivos = [f for f in os.listdir('data') if f.endswith('.csv')]
+    if not archivos: return pd.DataFrame()
+    return pd.concat([pd.read_csv(f'data/{f}') for f in archivos])
 
 def main():
-    st.title("📊 Inteligencia de Ventas - RI Consultores")
-    st.markdown("Panel gerencial avanzado para supervisión de cajas, inventarios y ventas.")
-    st.divider()
+    # 1. Sistema de "Acceso" (Muy sencillo)
+    modo = st.sidebar.radio("Navegación", ["Dashboard Gerencial", "Admin: Carga de Datos"])
 
-    st.sidebar.header("📁 Carga de Archivos Base")
-    file_move = st.sidebar.file_uploader("Subir Entrada de Diario (move.xlsx)", type=["xlsx"])
-    file_line = st.sidebar.file_uploader("Subir Líneas de Diario (line.xlsx)", type=["xlsx"])
+    if modo == "Admin: Carga de Datos":
+        st.sidebar.header("🔑 Acceso Administrador")
+        file_move = st.file_uploader("Entrada de Diario (move.xlsx)", type=["xlsx"])
+        file_line = st.file_uploader("Líneas de Diario (line.xlsx)", type=["xlsx"])
+        mes_archivo = st.text_input("Nombre del mes (ej: Agosto_2026)")
+        
+        if st.button("Procesar y Guardar"):
+            df = pd.merge(pd.read_excel(file_line), pd.read_excel(file_move), on='Número')
+            df.to_csv(f'data/{mes_archivo}.csv', index=False)
+            st.success(f"Datos de {mes_archivo} guardados.")
 
-    if file_move and file_line:
-        try:
-            move = pd.read_excel(file_move)
-            line = pd.read_excel(file_line)
-            
-            # Mapeo exacto basado en la estructura de Odoo encontrada ('Número')
-            df = pd.merge(line, move, on='Número', suffixes=('_line', '_move'))
-            
-            # Validar métricas clave con nombres reales
-            total_venta = df['Total Facturado'].sum() if 'Total Facturado' in df.columns else 0
-            
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Venta Total Acumulada", f"${total_venta:,.2f}")
-            col2.metric("Transacciones Totales", len(df['Número'].unique()))
-            col3.metric("Registros Procesados", len(df))
-
-            st.divider()
-
-            # Gráfico de Top Productos
-            if 'Product' in df.columns and 'Total Facturado' in df.columns:
-                st.subheader("🏆 Productos Top Ventas")
-                top_productos = df.groupby('Product')['Total Facturado'].sum().sort_values(ascending=False).head(10)
-                fig_top = px.bar(top_productos, orientation='h', color=top_productos.values, 
-                                 labels={'value': 'Monto ($)', 'Product': 'Producto'})
-                st.plotly_chart(fig_top, use_container_width=True)
-
-            # Consulta Detallada por Documento
-            st.subheader("🔍 Consulta Detallada por Transacción")
-            dte_lista = df['Número'].unique()
-            dte_seleccionado = st.selectbox("Selecciona un documento para ver detalle:", dte_lista)
-            
-            if dte_seleccionado:
-                detalle = df[df['Número'] == dte_seleccionado]
-                cols_a_mostrar = [c for c in ['Product', 'Cantidad Facturada', 'Precio Facturado', 'Total Facturado', 'Fecha de factura'] if c in detalle.columns]
-                st.dataframe(detalle[cols_a_mostrar], use_container_width=True)
-
-        except Exception as e:
-            st.error(f"Error procesando los datos: {e}")
     else:
-        st.info("👈 Sube ambos archivos Excel en la barra lateral para generar el análisis automático de productos y ventas.")
+        st.title("📊 Dashboard Gerencial - RI Consultores")
+        df_hist = cargar_historico()
+        
+        if df_hist.empty:
+            st.warning("No hay datos históricos cargados. Contacte al admin.")
+        else:
+            # Comparativa Mensual
+            st.subheader("📈 Comparativa Mensual de Ventas")
+            ventas_mensuales = df_hist.groupby('Mes')['Total Facturado'].sum().reset_index()
+            fig = px.bar(ventas_mensuales, x='Mes', y='Total Facturado', title="Ventas por Mes")
+            st.plotly_chart(fig, use_container_width=True)
 
 if __name__ == "__main__":
     main()
