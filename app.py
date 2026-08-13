@@ -5,12 +5,10 @@ import os
 
 st.set_page_config(page_title="Dashboard RI Consultores", layout="wide", page_icon="📊")
 
-# Inicialización segura de la carpeta de almacenamiento persistente
 if not os.path.exists('data'):
     os.makedirs('data')
 
 def cargar_historico():
-    """Carga y concatena todos los archivos mensuales guardados en la carpeta /data."""
     archivos = [f for f in os.listdir('data') if f.endswith('.csv')]
     if not archivos:
         return pd.DataFrame()
@@ -28,6 +26,10 @@ def main():
     if "admin_autenticado" not in st.session_state:
         st.session_state.admin_autenticado = False
 
+    # --- BARRA LATERAL CON LOGOTIPO ---
+    if os.path.exists("rosasaron.png"):
+        st.sidebar.image("rosasaron.png", use_column_width=True)
+    
     st.sidebar.markdown("### ⚙️ Panel de Control")
     modo = st.sidebar.radio("Navegación", ["Dashboard Gerencial", "Admin: Carga de Datos"])
 
@@ -76,8 +78,15 @@ def main():
                     st.sidebar.warning("Por favor, suba ambos archivos y asigne un nombre al mes.")
 
     else:
-        st.title("📊 Dashboard Gerencial - RI Consultores")
-        st.markdown("Control ejecutivo de ventas, inventarios y análisis por periodo.")
+        # --- ENCABEZADO CON LOGOTIPO PRINCIPAL ---
+        col_logo, col_title = st.columns([1, 5])
+        with col_logo:
+            if os.path.exists("rosasaron.png"):
+                st.image("rosasaron.png", width=120)
+        with col_title:
+            st.title("📊 Dashboard Gerencial - RI Consultores")
+            st.markdown("Control ejecutivo de ventas, inventarios y análisis por periodo.")
+        
         st.divider()
 
         df_hist = cargar_historico()
@@ -113,14 +122,12 @@ def main():
                     if 'Product' in df_mes.columns:
                         st.subheader(f"🏆 Top 10 Productos ({mes_seleccionado})")
                         
-                        # Agrupar sumando tanto el total facturado como las cantidades facturadas si existen
                         if 'Cantidad Facturada' in df_mes.columns:
                             top_productos = df_mes.groupby('Product').agg({
                                 'Total Facturado': 'sum',
                                 'Cantidad Facturada': 'sum'
                             }).reset_index().sort_values(by='Total Facturado', ascending=False).head(10)
                             
-                            # Crear una columna de texto combinada: Cantidad + Monto
                             top_productos['Etiqueta'] = top_productos.apply(
                                 lambda row: f"{row['Cantidad Facturada']:,.1f} un. | ${row['Total Facturado']:,.2f}", axis=1
                             )
@@ -148,8 +155,16 @@ def main():
                 with col_right:
                     st.subheader(f"🔍 Detalle por Transacción ({mes_seleccionado})")
                     if 'Número' in df_mes.columns:
+                        # Crear un diccionario o mapeo para mostrar el total en cada DTE del selector
+                        dte_totales = df_mes.groupby('Número')['Total Facturado'].sum()
+                        
+                        # Función para formatear las opciones del selectbox con su valor total
+                        def formatear_dte(dte):
+                            total_dte = dte_totales.get(dte, 0)
+                            return f"Doc: {dte} — Total: ${total_dte:,.2f}"
+
                         dte_lista = df_mes['Número'].unique()
-                        dte_seleccionado = st.selectbox("Selecciona un documento de venta:", dte_lista)
+                        dte_seleccionado = st.selectbox("Selecciona un documento de venta:", dte_lista, format_func=formatear_dte)
                         
                         if dte_seleccionado:
                             detalle = df_mes[df_mes['Número'] == dte_seleccionado]
