@@ -13,7 +13,7 @@ def main():
     st.markdown("Panel gerencial avanzado para supervisión de cajas, inventarios y ventas.")
     st.divider()
 
-    # Sección de carga de archivos por la interfaz para evitar errores de ruta en la nube
+    # Barra lateral para carga dinámica de archivos de contabilidad
     st.sidebar.header("📁 Carga de Archivos Base")
     file_move = st.sidebar.file_uploader("Subir Entrada de Diario (move.xlsx)", type=["xlsx"])
     file_line = st.sidebar.file_uploader("Subir Líneas de Diario (line.xlsx)", type=["xlsx"])
@@ -23,7 +23,7 @@ def main():
             move = pd.read_excel(file_move)
             line = pd.read_excel(file_line)
             
-            # Relacionar facturas con líneas de productos
+            # Relacionar facturas con líneas de productos de forma segura
             df = pd.merge(line, move, left_on='Move', right_on='Name', suffixes=('_line', '_move'))
             
             # KPIs Principales
@@ -57,7 +57,7 @@ def main():
         except Exception as e:
             st.error(f"Error al procesar los archivos de Excel: {e}")
     else:
-        st.info("👈 Por favor, sube los archivos de Excel de contabilidad (**Entrada de diario** y **Journal Item**) en la barra lateral para habilitar los gráficos y la analítica detallada de productos.")
+        st.info("👈 Por favor, sube los archivos de Excel de contabilidad (**Entrada de diario** y **Journal Item**) en la barra lateral para habilitar los gráficos y la analítica detallada.")
 
 if __name__ == "__main__":
     main()
