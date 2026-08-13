@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
+from odoo_connector import fetch_odoo_data, get_line_details
 
 st.set_page_config(page_title="Dashboard RI Consultores", layout="wide", page_icon="📊")
 
@@ -55,12 +56,12 @@ def main():
                 st.rerun()
                 
             st.sidebar.markdown("---")
-            st.sidebar.header("📁 Carga de Histórico Mensual")
+            st.sidebar.header("📁 Carga de Histórico (Manual)")
             file_move = st.file_uploader("Entrada de Diario (move.xlsx)", type=["xlsx"])
             file_line = st.file_uploader("Líneas de Diario (line.xlsx)", type=["xlsx"])
             mes_archivo = st.text_input("Identificador del Mes (Ej: Agosto_2026)", value="Agosto_2026")
             
-            if st.button("Procesar y Guardar en Historial"):
+            if st.button("Procesar y Guardar Archivos"):
                 if file_move and file_line and mes_archivo:
                     try:
                         move = pd.read_excel(file_move)
@@ -77,6 +78,58 @@ def main():
                 else:
                     st.sidebar.warning("Por favor, suba ambos archivos y asigne un nombre al mes.")
 
+            # ==========================================
+            # NUEVO BLOQUE: SINCRONIZACIÓN AUTOMÁTICA ODOO
+            # ==========================================
+            st.sidebar.markdown("---")
+            st.sidebar.header("🔄 Sincronización Automática Odoo")
+            
+            fecha_inicio_sync = st.sidebar.text_input("Fecha Inicio (AAAA-MM-DD)", value="2026-08-01")
+            mes_destino_odoo = st.sidebar.text_input("Mes Destino Odoo", value="Agosto_2026")
+            
+            if st.sidebar.button("Sincronizar Datos desde Odoo"):
+                with st.spinner("Conectando con Odoo y extrayendo registros..."):
+                    try:
+                        from odoo_connector import fetch_odoo_data, get_line_details
+                        
+                        facturas = fetch_odoo_data(fecha_inicio_sync)
+                        
+                        if not facturas:
+                            st.sidebar.warning("No se encontraron facturas publicadas desde esa fecha.")
+                        else:
+                            registros_totales = []
+                            for f in facturas:
+                                num_doc = f.get('name', 'S/N')
+                                fecha_fac = f.get('invoice_date', '')
+                                line_ids = f.get('invoice_line_ids', [])
+                                
+                                if line_ids:
+                                    lineas = get_line_details(line_ids)
+                                    for l in lineas:
+                                        prod_raw = l.get('product_id', ('', 'Desconocido'))
+                                        nombre_prod = prod_raw[1] if isinstance(prod_raw, (list, tuple)) else str(prod_raw)
+                                        
+                                        registros_totales.append({
+                                            'Número': num_doc,
+                                            'Fecha de factura': fecha_fac,
+                                            'Product': nombre_prod,
+                                            'Cantidad Facturada': l.get('quantity', 0),
+                                            'Precio Facturado': l.get('price_unit', 0),
+                                            'Total Facturado': l.get('price_subtotal', 0),
+                                            'Mes': mes_destino_odoo
+                                        })
+                            
+                            if registros_totales:
+                                df_odoo = pd.DataFrame(registros_totales)
+                                ruta_archivo = f'data/{mes_destino_odoo}.csv'
+                                df_odoo.to_csv(ruta_archivo, index=False)
+                                st.sidebar.success(f"¡Sincronización completa! Se guardaron {len(df_odoo)} registros.")
+                                st.rerun()
+                            else:
+                                st.sidebar.warning("Las facturas encontradas no contienen líneas detalladas.")
+                                
+                    except Exception as e:
+                        st.sidebar.error(f"Error en la conexión con Odoo: {e}")
     else:
         # --- ENCABEZADO CON LOGOTIPO PRINCIPAL ---
         col_logo, col_title = st.columns([1, 5])
