@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
-from datetime import datetime
 
 st.set_page_config(page_title="Dashboard RI Consultores", layout="wide", page_icon="📊")
 
@@ -26,35 +25,60 @@ def cargar_historico():
     return pd.concat(dfs, ignore_index=True)
 
 def main():
-    # Menú lateral para segmentar el panel del Administrador y la vista del Dueño
+    # Inicializar estado de autenticación en la sesión
+    if "admin_autenticado" not in st.session_state:
+        st.session_state.admin_autenticado = False
+
+    # Menú lateral para navegación
     st.sidebar.markdown("### ⚙️ Panel de Control")
     modo = st.sidebar.radio("Navegación", ["Dashboard Gerencial", "Admin: Carga de Datos"])
 
     if modo == "Admin: Carga de Datos":
         st.sidebar.markdown("---")
-        st.sidebar.header("🔑 Carga de Histórico Mensual")
-        file_move = st.file_uploader("Entrada de Diario (move.xlsx)", type=["xlsx"])
-        file_line = st.file_uploader("Líneas de Diario (line.xlsx)", type=["xlsx"])
-        mes_archivo = st.text_input("Identificador del Mes (Ej: Agosto_2026)", value="Agosto_2026")
+        st.sidebar.header("🔑 Acceso Administrador")
         
-        if st.button("Procesar y Guardar en Historial"):
-            if file_move and file_line and mes_archivo:
-                try:
-                    move = pd.read_excel(file_move)
-                    line = pd.read_excel(file_line)
-                    
-                    # Merge con la columna real de Odoo ('Número')
-                    df = pd.merge(line, move, on='Número', suffixes=('_line', '_move'))
-                    df['Mes'] = mes_archivo
-                    
-                    # Guardar en persistencia local
-                    ruta_archivo = f'data/{mes_archivo}.csv'
-                    df.to_csv(ruta_archivo, index=False)
-                    st.sidebar.success(f"¡Datos de {mes_archivo} guardados correctamente!")
-                except Exception as e:
-                    st.sidebar.error(f"Error al procesar los archivos: {e}")
-            else:
-                st.sidebar.warning("Por favor, suba ambos archivos y asigne un nombre al mes.")
+        # Validación de contraseña (puedes cambiar "RI2026*" por la clave que prefieras)
+        PASSWORD_ADMIN = "RI2026*" 
+        
+        if not st.session_state.admin_autenticado:
+            password_input = st.sidebar.text_input("Contraseña de Admin", type="password")
+            if st.sidebar.button("Ingresar"):
+                if password_input == PASSWORD_ADMIN:
+                    st.session_state.admin_autenticado = True
+                    st.sidebar.success("¡Acceso concedido!")
+                    st.rerun()
+                else:
+                    st.sidebar.error("Contraseña incorrecta.")
+        else:
+            st.sidebar.success("Sesión de Admin Activa")
+            if st.sidebar.button("Cerrar Sesión"):
+                st.session_state.admin_autenticado = False
+                st.rerun()
+                
+            st.sidebar.markdown("---")
+            st.sidebar.header("📁 Carga de Histórico Mensual")
+            file_move = st.file_uploader("Entrada de Diario (move.xlsx)", type=["xlsx"])
+            file_line = st.file_uploader("Líneas de Diario (line.xlsx)", type=["xlsx"])
+            mes_archivo = st.text_input("Identificador del Mes (Ej: Agosto_2026)", value="Agosto_2026")
+            
+            if st.button("Procesar y Guardar en Historial"):
+                if file_move and file_line and mes_archivo:
+                    try:
+                        move = pd.read_excel(file_move)
+                        line = pd.read_excel(file_line)
+                        
+                        # Merge con la columna real de Odoo ('Número')
+                        df = pd.merge(line, move, on='Número', suffixes=('_line', '_move'))
+                        df['Mes'] = mes_archivo
+                        
+                        # Guardar en persistencia local
+                        ruta_archivo = f'data/{mes_archivo}.csv'
+                        df.to_csv(ruta_archivo, index=False)
+                        st.sidebar.success(f"¡Datos de {mes_archivo} guardados correctamente!")
+                    except Exception as e:
+                        st.sidebar.error(f"Error al procesar los archivos: {e}")
+                else:
+                    st.sidebar.warning("Por favor, suba ambos archivos y asigne un nombre al mes.")
 
     else:
         # VISTA PRINCIPAL DEL DUEÑO (Gerencial, limpia y filtrable)
@@ -65,7 +89,7 @@ def main():
         df_hist = cargar_historico()
         
         if df_hist.empty:
-            st.warning("⚠️ No hay datos históricos en la base de datos local. Utiliza la opción **Admin: Carga de Datos** en la barra lateral para registrar el primer mes.")
+            st.warning("⚠️ No hay datos históricos en la base de datos local. El administrador debe cargar el primer mes desde el panel protegido.")
         else:
             if 'Total Facturado' in df_hist.columns and 'Mes' in df_hist.columns:
                 
@@ -76,7 +100,6 @@ def main():
                 with col_sel1:
                     mes_seleccionado = st.selectbox("📅 Seleccionar Mes a Consultar:", meses_disponibles, index=len(meses_disponibles)-1)
                 
-                # Filtrar dataframe por el mes seleccionado
                 df_mes = df_hist[df_hist['Mes'] == mes_seleccionado]
 
                 st.markdown(f"### 📌 Resumen Activo para: **{mes_seleccionado}**")
@@ -92,7 +115,7 @@ def main():
 
                 st.divider()
 
-                # --- SECCIÓN: PRODUCTOS TOP Y DETALLE POR DOCUMENTO (DEL MES SELECCIONADO) ---
+                # --- SECCIÓN: PRODUCTOS TOP Y DETALLE POR DOCUMENTO ---
                 col_left, col_right = st.columns(2)
 
                 with col_left:
