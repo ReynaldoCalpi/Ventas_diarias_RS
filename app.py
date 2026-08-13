@@ -56,12 +56,21 @@ def main():
                 st.rerun()
                 
             st.sidebar.markdown("---")
-            st.sidebar.header("📁 Carga de Histórico (Manual)")
+            st.sidebar.header("📁 Carga Asistida (Opción A)")
+            
+            with st.sidebar.expander("💡 ¿Cómo exportar desde Odoo?"):
+                st.markdown("""
+                1. Ve a **Facturación > Clientes > Facturas**.
+                2. Selecciona la vista de lista.
+                3. Haz clic en **Acción > Exportar** para descargar tu reporte de movimientos y líneas.
+                4. Sube ambos archivos aquí abajo.
+                """)
+
             file_move = st.file_uploader("Entrada de Diario (move.xlsx)", type=["xlsx"])
             file_line = st.file_uploader("Líneas de Diario (line.xlsx)", type=["xlsx"])
             mes_archivo = st.text_input("Identificador del Mes (Ej: Agosto_2026)", value="Agosto_2026")
             
-            if st.button("Procesar y Guardar Archivos"):
+            if st.button("Procesar y Guardar en Historial"):
                 if file_move and file_line and mes_archivo:
                     try:
                         move = pd.read_excel(file_move)
@@ -73,6 +82,7 @@ def main():
                         ruta_archivo = f'data/{mes_archivo}.csv'
                         df.to_csv(ruta_archivo, index=False)
                         st.sidebar.success(f"¡Datos de {mes_archivo} guardados correctamente!")
+                        st.rerun()
                     except Exception as e:
                         st.sidebar.error(f"Error al procesar los archivos: {e}")
                 else:
