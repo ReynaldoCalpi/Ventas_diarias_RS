@@ -2,10 +2,11 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
+from datetime import datetime
 
 st.set_page_config(page_title="Dashboard RI Consultores", layout="wide", page_icon="📊")
 
-# Inicialización de la carpeta de almacenamiento persistente
+# Inicialización segura de la carpeta de almacenamiento persistente
 if not os.path.exists('data'):
     os.makedirs('data')
 
@@ -25,15 +26,15 @@ def cargar_historico():
     return pd.concat(dfs, ignore_index=True)
 
 def main():
-    # Menú lateral de navegación (Oculto o reservado para ti, el Admin)
+    # Menú lateral para segmentar el panel del Administrador y la vista del Dueño
     st.sidebar.markdown("### ⚙️ Panel de Control")
     modo = st.sidebar.radio("Navegación", ["Dashboard Gerencial", "Admin: Carga de Datos"])
 
     if modo == "Admin: Carga de Datos":
         st.sidebar.markdown("---")
         st.sidebar.header("🔑 Carga de Histórico Mensual")
-        file_move = st.sidebar.file_uploader("Entrada de Diario (move.xlsx)", type=["xlsx"])
-        file_line = st.sidebar.file_uploader("Líneas de Diario (line.xlsx)", type=["xlsx"])
+        file_move = st.file_uploader("Entrada de Diario (move.xlsx)", type=["xlsx"])
+        file_line = st.file_uploader("Líneas de Diario (line.xlsx)", type=["xlsx"])
         mes_archivo = st.text_input("Identificador del Mes (Ej: Agosto_2026)", value="Agosto_2026")
         
         if st.button("Procesar y Guardar en Historial"):
@@ -56,9 +57,9 @@ def main():
                 st.sidebar.warning("Por favor, suba ambos archivos y asigne un nombre al mes.")
 
     else:
-        # VISTA PRINCIPAL DEL DUEÑO (Gerencial, limpia y detallada)
+        # VISTA PRINCIPAL DEL DUEÑO (Gerencial, limpia y filtrable)
         st.title("📊 Dashboard Gerencial - RI Consultores")
-        st.markdown("Control ejecutivo de ventas, inventarios y análisis por producto.")
+        st.markdown("Control ejecutivo de ventas, inventarios y análisis por periodo.")
         st.divider()
 
         df_hist = cargar_historico()
@@ -68,39 +69,36 @@ def main():
         else:
             if 'Total Facturado' in df_hist.columns and 'Mes' in df_hist.columns:
                 
-                # KPIs Generales
-                total_venta_global = df_hist['Total Facturado'].sum()
-                col1, col2, col3 = st.columns(3)
-                col1.metric("💰 Venta Total Histórica", f"${total_venta_global:,.2f}")
-                col2.metric("📄 Transacciones Únicas", len(df_hist['Número'].unique()) if 'Número' in df_hist.columns else len(df_hist))
-                col3.metric("📅 Meses Registrados", len(df_hist['Mes'].unique()))
-
-                st.divider()
-
-                # Comparativa Mensual
-                st.subheader("📈 Comparativa de Ventas por Mes")
-                ventas_mensuales = df_hist.groupby('Mes')['Total Facturado'].sum().reset_index()
+                # --- SELECTOR DE MES Y FILTRADO ---
+                meses_disponibles = sorted(df_hist['Mes'].unique())
                 
-                fig = px.bar(
-                    ventas_mensuales, 
-                    x='Mes', 
-                    y='Total Facturado', 
-                    text_auto='.2s',
-                    color='Mes',
-                    labels={'Total Facturado': 'Venta Total ($)', 'Mes': 'Periodo'}
-                )
-                fig.update_layout(showlegend=False)
-                st.plotly_chart(fig, use_container_width=True)
+                col_sel1, col_sel2 = st.columns([2, 4])
+                with col_sel1:
+                    mes_seleccionado = st.selectbox("📅 Seleccionar Mes a Consultar:", meses_disponibles, index=len(meses_disponibles)-1)
+                
+                # Filtrar dataframe por el mes seleccionado
+                df_mes = df_hist[df_hist['Mes'] == mes_seleccionado]
+
+                st.markdown(f"### 📌 Resumen Activo para: **{mes_seleccionado}**")
+                
+                # KPIs Específicos del Mes Seleccionado
+                venta_mes = df_mes['Total Facturado'].sum()
+                transacciones_mes = len(df_mes['Número'].unique()) if 'Número' in df_mes.columns else len(df_mes)
+                
+                kpi1, kpi2, kpi3 = st.columns(3)
+                kpi1.metric(f"💰 Ventas Acumuladas ({mes_seleccionado})", f"${venta_mes:,.2f}")
+                kpi2.metric(f"📄 Transacciones ({mes_seleccionado})", f"{transacciones_mes:,}")
+                kpi3.metric("📅 Total Meses en Historial", len(meses_disponibles))
 
                 st.divider()
 
-                # --- SECCIÓN RECUPERADA: PRODUCTOS TOP Y DETALLE POR DOCUMENTO ---
+                # --- SECCIÓN: PRODUCTOS TOP Y DETALLE POR DOCUMENTO (DEL MES SELECCIONADO) ---
                 col_left, col_right = st.columns(2)
 
                 with col_left:
-                    if 'Product' in df_hist.columns:
-                        st.subheader("🏆 Top 10 Productos Más Vendidos")
-                        top_productos = df_hist.groupby('Product')['Total Facturado'].sum().sort_values(ascending=False).head(10)
+                    if 'Product' in df_mes.columns:
+                        st.subheader(f"🏆 Top 10 Productos ({mes_seleccionado})")
+                        top_productos = df_mes.groupby('Product')['Total Facturado'].sum().sort_values(ascending=False).head(10)
                         fig_top = px.bar(
                             top_productos, 
                             orientation='h', 
@@ -111,15 +109,33 @@ def main():
                         st.plotly_chart(fig_top, use_container_width=True)
 
                 with col_right:
-                    st.subheader("🔍 Detalle por Transacción (DTE)")
-                    if 'Número' in df_hist.columns:
-                        dte_lista = df_hist['Número'].unique()
+                    st.subheader(f"🔍 Detalle por Transacción ({mes_seleccionado})")
+                    if 'Número' in df_mes.columns:
+                        dte_lista = df_mes['Número'].unique()
                         dte_seleccionado = st.selectbox("Selecciona un documento de venta:", dte_lista)
                         
                         if dte_seleccionado:
-                            detalle = df_hist[df_hist['Número'] == dte_seleccionado]
+                            detalle = df_mes[df_mes['Número'] == dte_seleccionado]
                             cols_a_mostrar = [c for c in ['Product', 'Cantidad Facturada', 'Precio Facturado', 'Total Facturado', 'Fecha de factura'] if c in detalle.columns]
                             st.dataframe(detalle[cols_a_mostrar], use_container_width=True)
+
+                st.divider()
+
+                # --- COMPARATIVA HISTÓRICA GENERAL ---
+                st.subheader("📈 Comparativa Histórica de Ventas por Mes")
+                ventas_mensuales = df_hist.groupby('Mes')['Total Facturado'].sum().reset_index()
+                
+                fig_comp = px.bar(
+                    ventas_mensuales, 
+                    x='Mes', 
+                    y='Total Facturado', 
+                    text_auto='.2s',
+                    color='Mes',
+                    labels={'Total Facturado': 'Venta Total ($)', 'Mes': 'Periodo'}
+                )
+                fig_comp.update_layout(showlegend=False)
+                st.plotly_chart(fig_comp, use_container_width=True)
+
             else:
                 st.error("Los datos cargados no contienen las columnas requeridas para el análisis.")
 
