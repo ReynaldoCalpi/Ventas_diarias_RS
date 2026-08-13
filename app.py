@@ -25,11 +25,9 @@ def cargar_historico():
     return pd.concat(dfs, ignore_index=True)
 
 def main():
-    # Inicializar estado de autenticación en la sesión
     if "admin_autenticado" not in st.session_state:
         st.session_state.admin_autenticado = False
 
-    # Menú lateral para navegación
     st.sidebar.markdown("### ⚙️ Panel de Control")
     modo = st.sidebar.radio("Navegación", ["Dashboard Gerencial", "Admin: Carga de Datos"])
 
@@ -78,7 +76,6 @@ def main():
                     st.sidebar.warning("Por favor, suba ambos archivos y asigne un nombre al mes.")
 
     else:
-        # VISTA PRINCIPAL DEL DUEÑO (Gerencial, limpia y filtrable)
         st.title("📊 Dashboard Gerencial - RI Consultores")
         st.markdown("Control ejecutivo de ventas, inventarios y análisis por periodo.")
         st.divider()
@@ -90,7 +87,6 @@ def main():
         else:
             if 'Total Facturado' in df_hist.columns and 'Mes' in df_hist.columns:
                 
-                # --- SELECTOR DE MES Y FILTRADO ---
                 meses_disponibles = sorted(df_hist['Mes'].unique())
                 
                 col_sel1, col_sel2 = st.columns([2, 4])
@@ -101,7 +97,6 @@ def main():
 
                 st.markdown(f"### 📌 Resumen Activo para: **{mes_seleccionado}**")
                 
-                # KPIs Específicos del Mes Seleccionado
                 venta_mes = df_mes['Total Facturado'].sum()
                 transacciones_mes = len(df_mes['Número'].unique()) if 'Número' in df_mes.columns else len(df_mes)
                 
@@ -112,24 +107,36 @@ def main():
 
                 st.divider()
 
-                # --- SECCIÓN: PRODUCTOS TOP Y DETALLE POR DOCUMENTO ---
                 col_left, col_right = st.columns(2)
 
                 with col_left:
                     if 'Product' in df_mes.columns:
                         st.subheader(f"🏆 Top 10 Productos ({mes_seleccionado})")
-                        top_productos = df_mes.groupby('Product')['Total Facturado'].sum().sort_values(ascending=False).head(10).reset_index()
                         
-                        # Gráfico de barras horizontales sin barra de color lateral, con texto integrado a la par
+                        # Agrupar sumando tanto el total facturado como las cantidades facturadas si existen
+                        if 'Cantidad Facturada' in df_mes.columns:
+                            top_productos = df_mes.groupby('Product').agg({
+                                'Total Facturado': 'sum',
+                                'Cantidad Facturada': 'sum'
+                            }).reset_index().sort_values(by='Total Facturado', ascending=False).head(10)
+                            
+                            # Crear una columna de texto combinada: Cantidad + Monto
+                            top_productos['Etiqueta'] = top_productos.apply(
+                                lambda row: f"{row['Cantidad Facturada']:,.1f} un. | ${row['Total Facturado']:,.2f}", axis=1
+                            )
+                        else:
+                            top_productos = df_mes.groupby('Product')['Total Facturado'].sum().reset_index().sort_values(by='Total Facturado', ascending=False).head(10)
+                            top_productos['Etiqueta'] = top_productos['Total Facturado'].apply(lambda x: f"${x:,.2f}")
+
                         fig_top = px.bar(
                             top_productos, 
                             x='Total Facturado',
                             y='Product',
                             orientation='h', 
-                            text='Total Facturado',
+                            text='Etiqueta',
                             labels={'Total Facturado': 'Monto Total ($)', 'Product': 'Producto'}
                         )
-                        fig_top.update_traces(texttemplate='$%{text:,.2f}', textposition='outside')
+                        fig_top.update_traces(textposition='outside')
                         fig_top.update_layout(
                             yaxis={'categoryorder':'total ascending'}, 
                             showlegend=False,
@@ -151,7 +158,6 @@ def main():
 
                 st.divider()
 
-                # --- COMPARATIVA HISTÓRICA GENERAL ---
                 st.subheader("📈 Comparativa Histórica de Ventas por Mes")
                 ventas_mensuales = df_hist.groupby('Mes')['Total Facturado'].sum().reset_index()
                 
