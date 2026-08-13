@@ -37,7 +37,6 @@ def main():
         st.sidebar.markdown("---")
         st.sidebar.header("🔑 Acceso Administrador")
         
-        # Validación de contraseña (puedes cambiar "RI2026*" por la clave que prefieras)
         PASSWORD_ADMIN = "RI2026*" 
         
         if not st.session_state.admin_autenticado:
@@ -67,11 +66,9 @@ def main():
                         move = pd.read_excel(file_move)
                         line = pd.read_excel(file_line)
                         
-                        # Merge con la columna real de Odoo ('Número')
                         df = pd.merge(line, move, on='Número', suffixes=('_line', '_move'))
                         df['Mes'] = mes_archivo
                         
-                        # Guardar en persistencia local
                         ruta_archivo = f'data/{mes_archivo}.csv'
                         df.to_csv(ruta_archivo, index=False)
                         st.sidebar.success(f"¡Datos de {mes_archivo} guardados correctamente!")
@@ -121,14 +118,24 @@ def main():
                 with col_left:
                     if 'Product' in df_mes.columns:
                         st.subheader(f"🏆 Top 10 Productos ({mes_seleccionado})")
-                        top_productos = df_mes.groupby('Product')['Total Facturado'].sum().sort_values(ascending=False).head(10)
+                        top_productos = df_mes.groupby('Product')['Total Facturado'].sum().sort_values(ascending=False).head(10).reset_index()
+                        
+                        # Gráfico de barras horizontales sin barra de color lateral, con texto integrado a la par
                         fig_top = px.bar(
                             top_productos, 
+                            x='Total Facturado',
+                            y='Product',
                             orientation='h', 
-                            color=top_productos.values,
-                            labels={'value': 'Monto Total ($)', 'Product': 'Producto'}
+                            text='Total Facturado',
+                            labels={'Total Facturado': 'Monto Total ($)', 'Product': 'Producto'}
                         )
-                        fig_top.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False)
+                        fig_top.update_traces(texttemplate='$%{text:,.2f}', textposition='outside')
+                        fig_top.update_layout(
+                            yaxis={'categoryorder':'total ascending'}, 
+                            showlegend=False,
+                            xaxis_title="Monto Total ($)",
+                            yaxis_title=""
+                        )
                         st.plotly_chart(fig_top, use_container_width=True)
 
                 with col_right:
