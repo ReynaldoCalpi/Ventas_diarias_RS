@@ -79,6 +79,8 @@ def main():
                         df = pd.merge(line, move, on='Número', suffixes=('_line', '_move'))
                         df['Mes'] = mes_archivo
                         
+                        # Asegurar que la carpeta data exista
+                        os.makedirs("data", exist_ok=True)
                         ruta_archivo = f'data/{mes_archivo}.csv'
                         df.to_csv(ruta_archivo, index=False)
                         st.sidebar.success(f"¡Datos de {mes_archivo} guardados correctamente!")
@@ -88,6 +90,30 @@ def main():
                 else:
                     st.sidebar.warning("Por favor, suba ambos archivos y asigne un nombre al mes.")
 
+            # ==========================================
+            # GESTIÓN Y ELIMINACIÓN DE HISTORIAL EXISTENTE
+            # ==========================================
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("🗑️ Historial de Archivos en Servidor")
+            
+            os.makedirs("data", exist_ok=True)
+            archivos_guardados = [f for f in os.listdir("data") if f.endswith(".csv")]
+            
+            if archivos_guardados:
+                st.sidebar.write("Archivos de meses disponibles:")
+                for arch in archivos_guardados:
+                    col_name, col_del = st.sidebar.columns([3, 1])
+                    col_name.text(arch)
+                    if col_del.button("❌", key=f"del_{arch}", help=f"Eliminar {arch}"):
+                        ruta_a_borrar = os.path.join("data", arch)
+                        try:
+                            os.remove(ruta_a_borrar)
+                            st.sidebar.success(f"Eliminado: {arch}")
+                            st.rerun()
+                        except Exception as e:
+                            st.sidebar.error(f"No se pudo borrar: {e}")
+            else:
+                st.sidebar.info("No hay archivos CSV en la carpeta data.")
             # ==========================================
             # NUEVO BLOQUE: SINCRONIZACIÓN AUTOMÁTICA ODOO
             # ==========================================
