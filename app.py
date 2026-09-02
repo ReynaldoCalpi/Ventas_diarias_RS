@@ -6,8 +6,9 @@ from odoo_connector import fetch_odoo_data, get_line_details
 
 st.set_page_config(page_title="Dashboard RI Consultores", layout="wide", page_icon="📊")
 
-if not os.path.exists('data'):
-    os.makedirs('data')
+# --- Configuración de Directorio Persistente ---
+DATA_DIR = "/data" if os.path.exists("/data") else "data"
+os.makedirs(DATA_DIR, exist_ok=True)
 
 def cargar_historico():
     archivos = [f for f in os.listdir('data') if f.endswith('.csv')]
