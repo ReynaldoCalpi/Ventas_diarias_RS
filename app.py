@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
+import io
 from odoo_connector import fetch_odoo_data, get_line_details
 
 st.set_page_config(page_title="Dashboard RI Consultores", layout="wide", page_icon="📊")
@@ -214,7 +215,7 @@ def main():
                 
                 df_mes = df_hist[df_hist['Mes'] == mes_seleccionado]
 
-                # (Mejora 2) Filtro opcional por producto dentro del mes seleccionado
+                # Filtro opcional por producto dentro del mes seleccionado
                 with col_sel2:
                     productos_disponibles = ["Todos"] + sorted(df_mes['Product'].dropna().unique().tolist()) if 'Product' in df_mes.columns else ["Todos"]
                     producto_filtro = st.selectbox("🔎 Filtrar por Producto:", productos_disponibles)
@@ -222,7 +223,7 @@ def main():
                 if producto_filtro != "Todos":
                     df_mes = df_mes[df_mes['Product'] == producto_filtro]
 
-                # (Mejora 1) Cálculo de Deltas comparando con el mes inmediatamente anterior (si existe)
+                # Cálculo de Deltas comparando con el mes inmediatamente anterior (si existe)
                 idx_actual = meses_disponibles.index(mes_seleccionado)
                 delta_ventas_str = None
                 if idx_actual > 0:
@@ -304,14 +305,19 @@ def main():
 
                 st.divider()
 
-                # (Mejora 3) Botón de descarga para que el cliente exporte el reporte filtrado
+                # Botón de descarga en formato Excel (.xlsx)
                 st.subheader("📥 Exportar Datos del Periodo")
-                csv_data = df_mes.to_csv(index=False).encode('utf-8')
+                
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df_mes.to_excel(writer, index=False, sheet_name='Reporte_Ventas')
+                excel_data = output.getvalue()
+
                 st.download_button(
-                    label=f"📥 Descargar reporte de {mes_seleccionado} en CSV",
-                    data=csv_data,
-                    file_name=f"reporte_ventas_{mes_seleccionado}.csv",
-                    mime="text/csv",
+                    label=f"📥 Descargar reporte de {mes_seleccionado} en Excel",
+                    data=excel_data,
+                    file_name=f"reporte_ventas_{mes_seleccionado}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
 
                 st.divider()
