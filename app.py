@@ -208,11 +208,31 @@ def main():
                 
                 meses_disponibles = sorted(df_hist['Mes'].unique())
                 
-                col_sel1, col_sel2 = st.columns([2, 4])
+                col_sel1, col_sel2, col_down = st.columns([2, 2, 2])
                 with col_sel1:
                     mes_seleccionado = st.selectbox("📅 Seleccionar Mes a Consultar:", meses_disponibles, index=len(meses_disponibles)-1)
                 
                 df_mes = df_hist[df_hist['Mes'] == mes_seleccionado]
+
+                # (Mejora 2) Filtro opcional por producto dentro del mes seleccionado
+                with col_sel2:
+                    productos_disponibles = ["Todos"] + sorted(df_mes['Product'].dropna().unique().tolist()) if 'Product' in df_mes.columns else ["Todos"]
+                    producto_filtro = st.selectbox("🔎 Filtrar por Producto:", productos_disponibles)
+
+                if producto_filtro != "Todos":
+                    df_mes = df_mes[df_mes['Product'] == producto_filtro]
+
+                # (Mejora 1) Cálculo de Deltas comparando con el mes inmediatamente anterior (si existe)
+                idx_actual = meses_disponibles.index(mes_seleccionado)
+                delta_ventas_str = None
+                if idx_actual > 0:
+                    mes_anterior = meses_disponibles[idx_actual - 1]
+                    df_anterior = df_hist[df_hist['Mes'] == mes_anterior]
+                    venta_anterior = df_anterior['Total Facturado'].sum()
+                    venta_actual_total = df_mes['Total Facturado'].sum()
+                    if venta_anterior > 0:
+                        variacion = ((venta_actual_total - venta_anterior) / venta_anterior) * 100
+                        delta_ventas_str = f"{variacion:+.1f}% vs {mes_anterior}"
 
                 st.markdown(f"### 📌 Resumen Activo para: **{mes_seleccionado}**")
                 
@@ -220,7 +240,7 @@ def main():
                 transacciones_mes = len(df_mes['Número'].unique()) if 'Número' in df_mes.columns else len(df_mes)
                 
                 kpi1, kpi2, kpi3 = st.columns(3)
-                kpi1.metric(f"💰 Ventas Acumuladas ({mes_seleccionado})", f"${venta_mes:,.2f}")
+                kpi1.metric(f"💰 Ventas Acumuladas ({mes_seleccionado})", f"${venta_mes:,.2f}", delta=delta_ventas_str)
                 kpi2.metric(f"📄 Transacciones ({mes_seleccionado})", f"{transacciones_mes:,}")
                 kpi3.metric("📅 Total Meses en Historial", len(meses_disponibles))
 
@@ -272,12 +292,27 @@ def main():
                             return f"Doc: {dte} — Total: ${total_dte:,.2f}"
 
                         dte_lista = df_mes['Número'].unique()
-                        dte_seleccionado = st.selectbox("Selecciona un documento de venta:", dte_lista, format_func=formatear_dte)
-                        
-                        if dte_seleccionado:
-                            detalle = df_mes[df_mes['Número'] == dte_seleccionado]
-                            cols_a_mostrar = [c for c in ['Product', 'Cantidad Facturada', 'Precio Facturado', 'Total Facturado', 'Fecha de factura'] if c in detalle.columns]
-                            st.dataframe(detalle[cols_a_mostrar], use_container_width=True)
+                        if len(dte_lista) > 0:
+                            dte_seleccionado = st.selectbox("Selecciona un documento de venta:", dte_lista, format_func=formatear_dte)
+                            
+                            if dte_seleccionado:
+                                detalle = df_mes[df_mes['Número'] == dte_seleccionado]
+                                cols_a_mostrar = [c for c in ['Product', 'Cantidad Facturada', 'Precio Facturado', 'Total Facturado', 'Fecha de factura'] if c in detalle.columns]
+                                st.dataframe(detalle[cols_a_mostrar], use_container_width=True)
+                        else:
+                            st.info("No hay transacciones disponibles con el filtro actual.")
+
+                st.divider()
+
+                # (Mejora 3) Botón de descarga para que el cliente exporte el reporte filtrado
+                st.subheader("📥 Exportar Datos del Periodo")
+                csv_data = df_mes.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label=f"📥 Descargar reporte de {mes_seleccionado} en CSV",
+                    data=csv_data,
+                    file_name=f"reporte_ventas_{mes_seleccionado}.csv",
+                    mime="text/csv",
+                )
 
                 st.divider()
 
