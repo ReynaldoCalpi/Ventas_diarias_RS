@@ -6,32 +6,23 @@ from odoo_connector import fetch_odoo_data, get_line_details
 
 st.set_page_config(page_title="Dashboard RI Consultores", layout="wide", page_icon="📊")
 
-# --- Configuración de Directorio Persistente (/data en Render o local) ---
+# --- Configuración de Directorio Persistente ---
 DATA_DIR = "/data" if os.path.exists("/data") else "data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
 def cargar_historico():
-    try:
-        archivos = [f for f in os.listdir(DATA_DIR) if f.endswith('.csv')]
-    except Exception:
-        archivos = []
-        
+    # Uso de DATA_DIR en lugar de 'data' fijo
+    archivos = [f for f in os.listdir(DATA_DIR) if f.endswith('.csv')]
     if not archivos:
         return pd.DataFrame()
     
     dfs = []
     for f in archivos:
-        try:
-            ruta_csv = os.path.join(DATA_DIR, f)
-            df_temp = pd.read_csv(ruta_csv)
-            if 'Mes' not in df_temp.columns:
-                df_temp['Mes'] = f.replace('.csv', '')
-            dfs.append(df_temp)
-        except Exception:
-            continue
-            
-    if not dfs:
-        return pd.DataFrame()
+        ruta_completa = os.path.join(DATA_DIR, f)
+        df_temp = pd.read_csv(ruta_completa)
+        if 'Mes' not in df_temp.columns:
+            df_temp['Mes'] = f.replace('.csv', '')
+        dfs.append(df_temp)
         
     return pd.concat(dfs, ignore_index=True)
 
@@ -91,6 +82,7 @@ def main():
                         df = pd.merge(line, move, on='Número', suffixes=('_line', '_move'))
                         df['Mes'] = mes_archivo
                         
+                        # Asegurar que el directorio exista y guardar usando DATA_DIR
                         os.makedirs(DATA_DIR, exist_ok=True)
                         ruta_archivo = os.path.join(DATA_DIR, f'{mes_archivo}.csv')
                         df.to_csv(ruta_archivo, index=False)
@@ -108,10 +100,7 @@ def main():
             st.sidebar.subheader("🗑️ Historial de Archivos en Servidor")
             
             os.makedirs(DATA_DIR, exist_ok=True)
-            try:
-                archivos_guardados = [f for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
-            except Exception:
-                archivos_guardados = []
+            archivos_guardados = [f for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
             
             if archivos_guardados:
                 st.sidebar.write("Archivos de meses disponibles:")
@@ -127,7 +116,7 @@ def main():
                         except Exception as e:
                             st.sidebar.error(f"No se pudo borrar: {e}")
             else:
-                st.sidebar.info("No hay archivos CSV en la carpeta de datos.")
+                st.sidebar.info("No hay archivos CSV en el directorio de datos.")
 
             # ==========================================
             # NUEVO BLOQUE: SINCRONIZACIÓN AUTOMÁTICA ODOO
@@ -170,7 +159,6 @@ def main():
                             
                             if registros_totales:
                                 df_odoo = pd.DataFrame(registros_totales)
-                                os.makedirs(DATA_DIR, exist_ok=True)
                                 ruta_archivo = os.path.join(DATA_DIR, f'{mes_destino_odoo}.csv')
                                 df_odoo.to_csv(ruta_archivo, index=False)
                                 st.sidebar.success(f"¡Sincronización completa! Se guardaron {len(df_odoo)} registros.")
