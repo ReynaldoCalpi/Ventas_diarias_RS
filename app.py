@@ -11,7 +11,6 @@ DATA_DIR = "/data" if os.path.exists("/data") else "data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
 def cargar_historico():
-    # Uso de DATA_DIR en lugar de 'data' fijo
     archivos = [f for f in os.listdir(DATA_DIR) if f.endswith('.csv')]
     if not archivos:
         return pd.DataFrame()
@@ -36,6 +35,24 @@ def main():
     
     st.sidebar.markdown("### ⚙️ Panel de Control")
     modo = st.sidebar.radio("Navegación", ["Dashboard Gerencial", "Admin: Carga de Datos"])
+
+    # ==========================================
+    # NUEVA SECCIÓN: CONTACTO Y PROMOCIÓN EN BARRA LATERAL
+    # ==========================================
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 💬 ¿Te gusta este desarrollo?")
+    st.sidebar.markdown(
+        "Contáctame, puedo ayudarte a crear justo lo que necesitas y quieres."
+    )
+    
+    # Enlace directo a WhatsApp (Número con formato internacional: 503 7824-9071)
+    whatsapp_url = "https://wa.me/50378249071?text=Hola,%20me%20interesa%20un%20desarrollo%20a%20medida."
+    st.sidebar.markdown(f"📱 **WhatsApp:** [7824-9071]({whatsapp_url})", unsafe_allow_html=True)
+    
+    # Enlace a tu sitio web
+    web_url = "https://icy-forest-efc8.riconsultoressv2021.workers.dev/"
+    st.sidebar.markdown(f"🌐 **Sitio Web:** [Visitar Web]({web_url})", unsafe_allow_html=True)
+    # ==========================================
 
     if modo == "Admin: Carga de Datos":
         st.sidebar.markdown("---")
@@ -82,7 +99,6 @@ def main():
                         df = pd.merge(line, move, on='Número', suffixes=('_line', '_move'))
                         df['Mes'] = mes_archivo
                         
-                        # Asegurar que el directorio exista y guardar usando DATA_DIR
                         os.makedirs(DATA_DIR, exist_ok=True)
                         ruta_archivo = os.path.join(DATA_DIR, f'{mes_archivo}.csv')
                         df.to_csv(ruta_archivo, index=False)
@@ -119,7 +135,7 @@ def main():
                 st.sidebar.info("No hay archivos CSV en el directorio de datos.")
 
             # ==========================================
-            # NUEVO BLOQUE: SINCRONIZACIÓN AUTOMÁTICA ODOO
+            # SINCRONIZACIÓN AUTOMÁTICA ODOO
             # ==========================================
             st.sidebar.markdown("---")
             st.sidebar.header("🔄 Sincronización Automática Odoo")
