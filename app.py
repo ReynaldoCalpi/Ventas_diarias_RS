@@ -6,21 +6,32 @@ from odoo_connector import fetch_odoo_data, get_line_details
 
 st.set_page_config(page_title="Dashboard RI Consultores", layout="wide", page_icon="📊")
 
-# --- Configuración de Directorio Persistente ---
+# --- Configuración de Directorio Persistente (/data en Render o local) ---
 DATA_DIR = "/data" if os.path.exists("/data") else "data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
 def cargar_historico():
-    archivos = [f for f in os.listdir('data') if f.endswith('.csv')]
+    try:
+        archivos = [f for f in os.listdir(DATA_DIR) if f.endswith('.csv')]
+    except Exception:
+        archivos = []
+        
     if not archivos:
         return pd.DataFrame()
     
     dfs = []
     for f in archivos:
-        df_temp = pd.read_csv(f'data/{f}')
-        if 'Mes' not in df_temp.columns:
-            df_temp['Mes'] = f.replace('.csv', '')
-        dfs.append(df_temp)
+        try:
+            ruta_csv = os.path.join(DATA_DIR, f)
+            df_temp = pd.read_csv(ruta_csv)
+            if 'Mes' not in df_temp.columns:
+                df_temp['Mes'] = f.replace('.csv', '')
+            dfs.append(df_temp)
+        except Exception:
+            continue
+            
+    if not dfs:
+        return pd.DataFrame()
         
     return pd.concat(dfs, ignore_index=True)
 
@@ -28,7 +39,7 @@ def main():
     if "admin_autenticado" not in st.session_state:
         st.session_state.admin_autenticado = False
 
-    # --- BARRA LATERAL CON LOGOTIPO (Corregido a use_container_width) ---
+    # --- BARRA LATERAL CON LOGOTIPO ---
     if os.path.exists("rosasaron.png"):
         st.sidebar.image("rosasaron.png", use_container_width=True)
     
@@ -80,9 +91,8 @@ def main():
                         df = pd.merge(line, move, on='Número', suffixes=('_line', '_move'))
                         df['Mes'] = mes_archivo
                         
-                        # Asegurar que la carpeta data exista
-                        os.makedirs("data", exist_ok=True)
-                        ruta_archivo = f'data/{mes_archivo}.csv'
+                        os.makedirs(DATA_DIR, exist_ok=True)
+                        ruta_archivo = os.path.join(DATA_DIR, f'{mes_archivo}.csv')
                         df.to_csv(ruta_archivo, index=False)
                         st.sidebar.success(f"¡Datos de {mes_archivo} guardados correctamente!")
                         st.rerun()
@@ -97,8 +107,11 @@ def main():
             st.sidebar.markdown("---")
             st.sidebar.subheader("🗑️ Historial de Archivos en Servidor")
             
-            os.makedirs("data", exist_ok=True)
-            archivos_guardados = [f for f in os.listdir("data") if f.endswith(".csv")]
+            os.makedirs(DATA_DIR, exist_ok=True)
+            try:
+                archivos_guardados = [f for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
+            except Exception:
+                archivos_guardados = []
             
             if archivos_guardados:
                 st.sidebar.write("Archivos de meses disponibles:")
@@ -106,7 +119,7 @@ def main():
                     col_name, col_del = st.sidebar.columns([3, 1])
                     col_name.text(arch)
                     if col_del.button("❌", key=f"del_{arch}", help=f"Eliminar {arch}"):
-                        ruta_a_borrar = os.path.join("data", arch)
+                        ruta_a_borrar = os.path.join(DATA_DIR, arch)
                         try:
                             os.remove(ruta_a_borrar)
                             st.sidebar.success(f"Eliminado: {arch}")
@@ -114,7 +127,8 @@ def main():
                         except Exception as e:
                             st.sidebar.error(f"No se pudo borrar: {e}")
             else:
-                st.sidebar.info("No hay archivos CSV en la carpeta data.")
+                st.sidebar.info("No hay archivos CSV en la carpeta de datos.")
+
             # ==========================================
             # NUEVO BLOQUE: SINCRONIZACIÓN AUTOMÁTICA ODOO
             # ==========================================
@@ -127,8 +141,6 @@ def main():
             if st.sidebar.button("Sincronizar Datos desde Odoo"):
                 with st.spinner("Conectando con Odoo y extrayendo registros..."):
                     try:
-                        from odoo_connector import fetch_odoo_data, get_line_details
-                        
                         facturas = fetch_odoo_data(fecha_inicio_sync)
                         
                         if not facturas:
@@ -158,7 +170,8 @@ def main():
                             
                             if registros_totales:
                                 df_odoo = pd.DataFrame(registros_totales)
-                                ruta_archivo = f'data/{mes_destino_odoo}.csv'
+                                os.makedirs(DATA_DIR, exist_ok=True)
+                                ruta_archivo = os.path.join(DATA_DIR, f'{mes_destino_odoo}.csv')
                                 df_odoo.to_csv(ruta_archivo, index=False)
                                 st.sidebar.success(f"¡Sincronización completa! Se guardaron {len(df_odoo)} registros.")
                                 st.rerun()
