@@ -36,23 +36,17 @@ def main():
     st.sidebar.markdown("### ⚙️ Panel de Control")
     modo = st.sidebar.radio("Navegación", ["Dashboard Gerencial", "Admin: Carga de Datos"])
 
-    # ==========================================
-    # NUEVA SECCIÓN: CONTACTO Y PROMOCIÓN EN BARRA LATERAL
-    # ==========================================
+    # --- SECCIÓN DE CONTACTO Y PROMOCIÓN EN BARRA LATERAL ---
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 💬 ¿Te gusta este desarrollo?")
-    st.sidebar.markdown(
-        "Contáctame, puedo ayudarte a crear justo lo que necesitas y quieres."
-    )
+    st.sidebar.markdown("Contáctame, puedo ayudarte a crear justo lo que necesitas y quieres.")
     
-    # Enlace directo a WhatsApp (Número con formato internacional: 503 7824-9071)
     whatsapp_url = "https://wa.me/50378249071?text=Hola,%20me%20interesa%20un%20desarrollo%20a%20medida."
     st.sidebar.markdown(f"📱 **WhatsApp:** [7824-9071]({whatsapp_url})", unsafe_allow_html=True)
     
-    # Enlace a tu sitio web
     web_url = "https://icy-forest-efc8.riconsultoressv2021.workers.dev/"
     st.sidebar.markdown(f"🌐 **Sitio Web:** [Visitar Web]({web_url})", unsafe_allow_html=True)
-    # ==========================================
+    # --------------------------------------------------------
 
     if modo == "Admin: Carga de Datos":
         st.sidebar.markdown("---")
@@ -75,10 +69,19 @@ def main():
                 st.session_state.admin_autenticado = False
                 st.rerun()
                 
-            st.sidebar.markdown("---")
-            st.sidebar.header("📁 Carga Asistida (Opción A)")
+            # --- TÍTULO Y DIAGNÓSTICO DE DISCO EN PANEL PRINCIPAL DE ADMIN ---
+            st.title("🎛️ Panel de Control - Administrador")
+            st.markdown("Supervisa el cumplimiento fiscal, administra cuentas, revisa los documentos cargados y gestiona entregables de auditoría.")
             
-            with st.sidebar.expander("💡 ¿Cómo exportar desde Odoo?"):
+            with st.expander("🛠️ Diagnóstico de Disco Persistente", expanded=True):
+                st.markdown(f"Ruta actual de almacenamiento (`DATA_DIR`): `{DATA_DIR}`")
+                st.markdown(f"¿Existe la carpeta de datos?: `{os.path.exists(DATA_DIR)}`")
+                st.markdown(f"¿Disco Render activo (`/data` )?: `{os.path.exists('/data')}`")
+            
+            st.markdown("---")
+            st.header("📁 Carga Asistida (Opción A)")
+            
+            with st.expander("💡 ¿Cómo exportar desde Odoo?"):
                 st.markdown("""
                 1. Ve a **Facturación > Clientes > Facturas**.
                 2. Selecciona la vista de lista.
@@ -112,44 +115,44 @@ def main():
             # ==========================================
             # GESTIÓN Y ELIMINACIÓN DE HISTORIAL EXISTENTE
             # ==========================================
-            st.sidebar.markdown("---")
-            st.sidebar.subheader("🗑️ Historial de Archivos en Servidor")
+            st.markdown("---")
+            st.subheader("🗑️ Historial de Archivos en Servidor")
             
             os.makedirs(DATA_DIR, exist_ok=True)
             archivos_guardados = [f for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
             
             if archivos_guardados:
-                st.sidebar.write("Archivos de meses disponibles:")
+                st.write("Archivos de meses disponibles:")
                 for arch in archivos_guardados:
-                    col_name, col_del = st.sidebar.columns([3, 1])
+                    col_name, col_del = st.columns([3, 1])
                     col_name.text(arch)
                     if col_del.button("❌", key=f"del_{arch}", help=f"Eliminar {arch}"):
                         ruta_a_borrar = os.path.join(DATA_DIR, arch)
                         try:
                             os.remove(ruta_a_borrar)
-                            st.sidebar.success(f"Eliminado: {arch}")
+                            st.success(f"Eliminado: {arch}")
                             st.rerun()
                         except Exception as e:
-                            st.sidebar.error(f"No se pudo borrar: {e}")
+                            st.error(f"No se pudo borrar: {e}")
             else:
-                st.sidebar.info("No hay archivos CSV en el directorio de datos.")
+                st.info("No hay archivos CSV en el directorio de datos.")
 
             # ==========================================
             # SINCRONIZACIÓN AUTOMÁTICA ODOO
             # ==========================================
-            st.sidebar.markdown("---")
-            st.sidebar.header("🔄 Sincronización Automática Odoo")
+            st.markdown("---")
+            st.header("🔄 Sincronización Automática Odoo")
             
-            fecha_inicio_sync = st.sidebar.text_input("Fecha Inicio (AAAA-MM-DD)", value="2026-08-01")
-            mes_destino_odoo = st.sidebar.text_input("Mes Destino Odoo", value="Agosto_2026")
+            fecha_inicio_sync = st.text_input("Fecha Inicio (AAAA-MM-DD)", value="2026-08-01")
+            mes_destino_odoo = st.text_input("Mes Destino Odoo", value="Agosto_2026")
             
-            if st.sidebar.button("Sincronizar Datos desde Odoo"):
+            if st.button("Sincronizar Datos desde Odoo"):
                 with st.spinner("Conectando con Odoo y extrayendo registros..."):
                     try:
                         facturas = fetch_odoo_data(fecha_inicio_sync)
                         
                         if not facturas:
-                            st.sidebar.warning("No se encontraron facturas publicadas desde esa fecha.")
+                            st.warning("No se encontraron facturas publicadas desde esa fecha.")
                         else:
                             registros_totales = []
                             for f in facturas:
@@ -177,13 +180,13 @@ def main():
                                 df_odoo = pd.DataFrame(registros_totales)
                                 ruta_archivo = os.path.join(DATA_DIR, f'{mes_destino_odoo}.csv')
                                 df_odoo.to_csv(ruta_archivo, index=False)
-                                st.sidebar.success(f"¡Sincronización completa! Se guardaron {len(df_odoo)} registros.")
+                                st.success(f"¡Sincronización completa! Se guardaron {len(df_odoo)} registros.")
                                 st.rerun()
                             else:
-                                st.sidebar.warning("Las facturas encontradas no contienen líneas detalladas.")
+                                st.warning("Las facturas encontradas no contienen líneas detalladas.")
                                 
                     except Exception as e:
-                        st.sidebar.error(f"Error en la conexión con Odoo: {e}")
+                        st.error(f"Error en la conexión con Odoo: {e}")
     else:
         # --- ENCABEZADO CON LOGOTIPO PRINCIPAL ---
         col_logo, col_title = st.columns([1, 5])
