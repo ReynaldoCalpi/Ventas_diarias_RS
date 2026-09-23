@@ -2,33 +2,46 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
-import io
 from odoo_connector import fetch_odoo_data, get_line_details
 
 st.set_page_config(page_title="Dashboard RI Consultores", layout="wide", page_icon="📊")
 
-# --- Configuración de Directorio Persistente ---
+# --- Configuración de Directorio Persistente (/data en Render o local) ---
 DATA_DIR = "/data" if os.path.exists("/data") else "data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
 def cargar_historico():
-    archivos = [f for f in os.listdir(DATA_DIR) if f.endswith('.csv')]
+    try:
+        archivos = [f for f in os.listdir(DATA_DIR) if f.endswith('.csv')]
+    except Exception:
+        archivos = []
+        
     if not archivos:
         return pd.DataFrame()
     
     dfs = []
     for f in archivos:
-        ruta_completa = os.path.join(DATA_DIR, f)
-        df_temp = pd.read_csv(ruta_completa)
-        if 'Mes' not in df_temp.columns:
-            df_temp['Mes'] = f.replace('.csv', '')
-        dfs.append(df_temp)
+        try:
+            ruta_csv = os.path.join(DATA_DIR, f)
+            df_temp = pd.read_csv(ruta_csv)
+            if 'Mes' not in df_temp.columns:
+                df_temp['Mes'] = f.replace('.csv', '')
+            dfs.append(df_temp)
+        except Exception:
+            continue
+            
+    if not dfs:
+        return pd.DataFrame()
         
     return pd.concat(dfs, ignore_index=True)
 
 def main():
     if "admin_autenticado" not in st.session_state:
         st.session_state.admin_autenticado = False
+    
+    # Inicializar variable de estado para confirmación visual de carga
+    if "mensaje_exito" not in st.session_state:
+        st.session_state.mensaje_exito = None
 
     # --- BARRA LATERAL CON LOGOTIPO ---
     if os.path.exists("rosasaron.png"):
@@ -36,18 +49,6 @@ def main():
     
     st.sidebar.markdown("### ⚙️ Panel de Control")
     modo = st.sidebar.radio("Navegación", ["Dashboard Gerencial", "Admin: Carga de Datos"])
-
-    # --- SECCIÓN DE CONTACTO Y PROMOCIÓN EN BARRA LATERAL ---
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 💬 ¿Te gusta este desarrollo?")
-    st.sidebar.markdown("Contáctame, puedo ayudarte a crear justo lo que necesitas y quieres.")
-    
-    whatsapp_url = "https://wa.me/50378249071?text=Hola,%20me%20interesa%20un%20desarrollo%20a%20medida."
-    st.sidebar.markdown(f"📱 **WhatsApp:** [7824-9071]({whatsapp_url})", unsafe_allow_html=True)
-    
-    web_url = "https://icy-forest-efc8.riconsultoressv2021.workers.dev/"
-    st.sidebar.markdown(f"🌐 **Sitio Web:** [Visitar Web]({web_url})", unsafe_allow_html=True)
-    # --------------------------------------------------------
 
     if modo == "Admin: Carga de Datos":
         st.sidebar.markdown("---")
@@ -68,21 +69,13 @@ def main():
             st.sidebar.success("Sesión de Admin Activa")
             if st.sidebar.button("Cerrar Sesión"):
                 st.session_state.admin_autenticado = False
+                st.session_state.mensaje_exito = None
                 st.rerun()
                 
-            # --- TÍTULO Y DIAGNÓSTICO DE DISCO EN PANEL PRINCIPAL DE ADMIN ---
-            st.title("🎛️ Panel de Control - Administrador")
-            st.markdown("Supervisa el cumplimiento fiscal, administra cuentas, revisa los documentos cargados y gestiona entregables de auditoría.")
+            st.sidebar.markdown("---")
+            st.sidebar.header("📁 Carga Asistida (Opción A)")
             
-            with st.expander("🛠️ Diagnóstico de Disco Persistente", expanded=True):
-                st.markdown(f"Ruta actual de almacenamiento (`DATA_DIR`): `{DATA_DIR}`")
-                st.markdown(f"¿Existe la carpeta de datos?: `{os.path.exists(DATA_DIR)}`")
-                st.markdown(f"¿Disco Render activo (`/data` )?: `{os.path.exists('/data')}`")
-            
-            st.markdown("---")
-            st.header("📁 Carga Asistida (Opción A)")
-            
-            with st.expander("💡 ¿Cómo exportar desde Odoo?"):
+            with st.sidebar.expander("💡 ¿Cómo exportar desde Odoo?"):
                 st.markdown("""
                 1. Ve a **Facturación > Clientes > Facturas**.
                 2. Selecciona la vista de lista.
@@ -106,54 +99,31 @@ def main():
                         os.makedirs(DATA_DIR, exist_ok=True)
                         ruta_archivo = os.path.join(DATA_DIR, f'{mes_archivo}.csv')
                         df.to_csv(ruta_archivo, index=False)
-                        st.sidebar.success(f"¡Datos de {mes_archivo} guardados correctamente!")
+                        
+                        # Guardar mensaje de éxito persistente
+                        st.session_state.mensaje_exito = f"✅ ¡Información de '{mes_archivo}' subida y procesada correctamente en el servidor!"
                         st.rerun()
                     except Exception as e:
-                        st.sidebar.error(f"Error al procesar los archivos: {e}")
+                        st.error(f"Error al procesar los archivos: {e}")
                 else:
                     st.sidebar.warning("Por favor, suba ambos archivos y asigne un nombre al mes.")
 
             # ==========================================
-            # GESTIÓN Y ELIMINACIÓN DE HISTORIAL EXISTENTE
+            # NUEVO BLOQUE: SINCRONIZACIÓN AUTOMÁTICA ODOO
             # ==========================================
-            st.markdown("---")
-            st.subheader("🗑️ Historial de Archivos en Servidor")
+            st.sidebar.markdown("---")
+            st.sidebar.header("🔄 Sincronización Automática Odoo")
             
-            os.makedirs(DATA_DIR, exist_ok=True)
-            archivos_guardados = [f for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
+            fecha_inicio_sync = st.sidebar.text_input("Fecha Inicio (AAAA-MM-DD)", value="2026-08-01")
+            mes_destino_odoo = st.sidebar.text_input("Mes Destino Odoo", value="Agosto_2026")
             
-            if archivos_guardados:
-                st.write("Archivos de meses disponibles:")
-                for arch in archivos_guardados:
-                    col_name, col_del = st.columns([3, 1])
-                    col_name.text(arch)
-                    if col_del.button("❌", key=f"del_{arch}", help=f"Eliminar {arch}"):
-                        ruta_a_borrar = os.path.join(DATA_DIR, arch)
-                        try:
-                            os.remove(ruta_a_borrar)
-                            st.success(f"Eliminado: {arch}")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"No se pudo borrar: {e}")
-            else:
-                st.info("No hay archivos CSV en el directorio de datos.")
-
-            # ==========================================
-            # SINCRONIZACIÓN AUTOMÁTICA ODOO
-            # ==========================================
-            st.markdown("---")
-            st.header("🔄 Sincronización Automática Odoo")
-            
-            fecha_inicio_sync = st.text_input("Fecha Inicio (AAAA-MM-DD)", value="2026-08-01")
-            mes_destino_odoo = st.text_input("Mes Destino Odoo", value="Agosto_2026")
-            
-            if st.button("Sincronizar Datos desde Odoo"):
+            if st.sidebar.button("Sincronizar Datos desde Odoo"):
                 with st.spinner("Conectando con Odoo y extrayendo registros..."):
                     try:
                         facturas = fetch_odoo_data(fecha_inicio_sync)
                         
                         if not facturas:
-                            st.warning("No se encontraron facturas publicadas desde esa fecha.")
+                            st.sidebar.warning("No se encontraron facturas publicadas desde esa fecha.")
                         else:
                             registros_totales = []
                             for f in facturas:
@@ -179,15 +149,45 @@ def main():
                             
                             if registros_totales:
                                 df_odoo = pd.DataFrame(registros_totales)
+                                os.makedirs(DATA_DIR, exist_ok=True)
                                 ruta_archivo = os.path.join(DATA_DIR, f'{mes_destino_odoo}.csv')
                                 df_odoo.to_csv(ruta_archivo, index=False)
-                                st.success(f"¡Sincronización completa! Se guardaron {len(df_odoo)} registros.")
+                                
+                                st.session_state.mensaje_exito = f"✅ ¡Sincronización completada con éxito! Se guardaron {len(df_odoo)} registros para '{mes_destino_odoo}'."
                                 st.rerun()
                             else:
-                                st.warning("Las facturas encontradas no contienen líneas detalladas.")
+                                st.sidebar.warning("Las facturas encontradas no contienen líneas detalladas.")
                                 
                     except Exception as e:
-                        st.error(f"Error en la conexión con Odoo: {e}")
+                        st.sidebar.error(f"Error en la conexión con Odoo: {e}")
+
+            # ==========================================
+            # GESTIÓN Y ELIMINACIÓN DE HISTORIAL EXISTENTE
+            # ==========================================
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("🗑️ Historial de Archivos en Servidor")
+            
+            os.makedirs(DATA_DIR, exist_ok=True)
+            try:
+                archivos_guardados = [f for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
+            except Exception:
+                archivos_guardados = []
+            
+            if archivos_guardados:
+                st.sidebar.write("Archivos de meses disponibles:")
+                for arch in archivos_guardados:
+                    col_name, col_del = st.sidebar.columns([3, 1])
+                    col_name.text(arch)
+                    if col_del.button("❌", key=f"del_{arch}", help=f"Eliminar {arch}"):
+                        ruta_a_borrar = os.path.join(DATA_DIR, arch)
+                        try:
+                            os.remove(ruta_a_borrar)
+                            st.session_state.mensaje_exito = f"🗑️ Archivo eliminado: {arch}"
+                            st.rerun()
+                        except Exception as e:
+                            st.sidebar.error(f"No se pudo borrar: {e}")
+            else:
+                st.sidebar.info("No hay archivos CSV en la carpeta de datos.")
     else:
         # --- ENCABEZADO CON LOGOTIPO PRINCIPAL ---
         col_logo, col_title = st.columns([1, 5])
@@ -200,6 +200,12 @@ def main():
         
         st.divider()
 
+        # Mostrar alerta de confirmación persistente si existe
+        if st.session_state.mensaje_exito:
+            st.success(st.session_state.mensaje_exito)
+            # Opcional: limpiar el mensaje después de mostrarlo para que no sea eterno al navegar, o dejarlo visible.
+            # st.session_state.mensaje_exito = None
+
         df_hist = cargar_historico()
         
         if df_hist.empty:
@@ -209,31 +215,11 @@ def main():
                 
                 meses_disponibles = sorted(df_hist['Mes'].unique())
                 
-                col_sel1, col_sel2, col_down = st.columns([2, 2, 2])
+                col_sel1, col_sel2 = st.columns([2, 4])
                 with col_sel1:
                     mes_seleccionado = st.selectbox("📅 Seleccionar Mes a Consultar:", meses_disponibles, index=len(meses_disponibles)-1)
                 
                 df_mes = df_hist[df_hist['Mes'] == mes_seleccionado]
-
-                # Filtro opcional por producto dentro del mes seleccionado
-                with col_sel2:
-                    productos_disponibles = ["Todos"] + sorted(df_mes['Product'].dropna().unique().tolist()) if 'Product' in df_mes.columns else ["Todos"]
-                    producto_filtro = st.selectbox("🔎 Filtrar por Producto:", productos_disponibles)
-
-                if producto_filtro != "Todos":
-                    df_mes = df_mes[df_mes['Product'] == producto_filtro]
-
-                # Cálculo de Deltas comparando con el mes inmediatamente anterior (si existe)
-                idx_actual = meses_disponibles.index(mes_seleccionado)
-                delta_ventas_str = None
-                if idx_actual > 0:
-                    mes_anterior = meses_disponibles[idx_actual - 1]
-                    df_anterior = df_hist[df_hist['Mes'] == mes_anterior]
-                    venta_anterior = df_anterior['Total Facturado'].sum()
-                    venta_actual_total = df_mes['Total Facturado'].sum()
-                    if venta_anterior > 0:
-                        variacion = ((venta_actual_total - venta_anterior) / venta_anterior) * 100
-                        delta_ventas_str = f"{variacion:+.1f}% vs {mes_anterior}"
 
                 st.markdown(f"### 📌 Resumen Activo para: **{mes_seleccionado}**")
                 
@@ -241,7 +227,7 @@ def main():
                 transacciones_mes = len(df_mes['Número'].unique()) if 'Número' in df_mes.columns else len(df_mes)
                 
                 kpi1, kpi2, kpi3 = st.columns(3)
-                kpi1.metric(f"💰 Ventas Acumuladas ({mes_seleccionado})", f"${venta_mes:,.2f}", delta=delta_ventas_str)
+                kpi1.metric(f"💰 Ventas Acumuladas ({mes_seleccionado})", f"${venta_mes:,.2f}")
                 kpi2.metric(f"📄 Transacciones ({mes_seleccionado})", f"{transacciones_mes:,}")
                 kpi3.metric("📅 Total Meses en Historial", len(meses_disponibles))
 
@@ -293,32 +279,12 @@ def main():
                             return f"Doc: {dte} — Total: ${total_dte:,.2f}"
 
                         dte_lista = df_mes['Número'].unique()
-                        if len(dte_lista) > 0:
-                            dte_seleccionado = st.selectbox("Selecciona un documento de venta:", dte_lista, format_func=formatear_dte)
-                            
-                            if dte_seleccionado:
-                                detalle = df_mes[df_mes['Número'] == dte_seleccionado]
-                                cols_a_mostrar = [c for c in ['Product', 'Cantidad Facturada', 'Precio Facturado', 'Total Facturado', 'Fecha de factura'] if c in detalle.columns]
-                                st.dataframe(detalle[cols_a_mostrar], use_container_width=True)
-                        else:
-                            st.info("No hay transacciones disponibles con el filtro actual.")
-
-                st.divider()
-
-                # Botón de descarga en formato Excel (.xlsx)
-                st.subheader("📥 Exportar Datos del Periodo")
-                
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df_mes.to_excel(writer, index=False, sheet_name='Reporte_Ventas')
-                excel_data = output.getvalue()
-
-                st.download_button(
-                    label=f"📥 Descargar reporte de {mes_seleccionado} en Excel",
-                    data=excel_data,
-                    file_name=f"reporte_ventas_{mes_seleccionado}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
+                        dte_seleccionado = st.selectbox("Selecciona un documento de venta:", dte_lista, format_func=formatear_dte)
+                        
+                        if dte_seleccionado:
+                            detalle = df_mes[df_mes['Número'] == dte_seleccionado]
+                            cols_a_mostrar = [c for c in ['Product', 'Cantidad Facturada', 'Precio Facturado', 'Total Facturado', 'Fecha de factura'] if c in detalle.columns]
+                            st.dataframe(detalle[cols_a_mostrar], use_container_width=True)
 
                 st.divider()
 
