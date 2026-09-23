@@ -6,7 +6,7 @@ from odoo_connector import fetch_odoo_data, get_line_details
 
 st.set_page_config(page_title="Dashboard RI Consultores", layout="wide", page_icon="📊")
 
-# --- Configuración de Directorio Persistente (/data en Render o local) ---
+# --- Configuración de Directorio Persistente (Disco Activo en Render o local) ---
 DATA_DIR = "/data" if os.path.exists("/data") else "data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -38,8 +38,8 @@ def cargar_historico():
 def main():
     if "admin_autenticado" not in st.session_state:
         st.session_state.admin_autenticado = False
-    
-    # Inicializar variable de estado para confirmación visual de carga
+        
+    # Inicializar la variable para la alerta de confirmación visual
     if "mensaje_exito" not in st.session_state:
         st.session_state.mensaje_exito = None
 
@@ -100,16 +100,44 @@ def main():
                         ruta_archivo = os.path.join(DATA_DIR, f'{mes_archivo}.csv')
                         df.to_csv(ruta_archivo, index=False)
                         
-                        # Mensaje de éxito persistente para evitar reintentos por clics dobles
-                        st.session_state.mensaje_exito = f"✅ ¡Información de '{mes_archivo}' subida y procesada correctamente en el disco de Render ({DATA_DIR})!"
+                        # Alerta confirmada de subida en disco persistente
+                        st.session_state.mensaje_exito = f"✅ ¡Información de '{mes_archivo}' guardada con éxito en el disco ({DATA_DIR})!"
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error al procesar los archivos: {e}")
+                        st.sidebar.error(f"Error al procesar los archivos: {e}")
                 else:
                     st.sidebar.warning("Por favor, suba ambos archivos y asigne un nombre al mes.")
 
             # ==========================================
-            # BLOQUE: SINCRONIZACIÓN AUTOMÁTICA ODOO
+            # GESTIÓN Y ELIMINACIÓN DE HISTORIAL EXISTENTE
+            # ==========================================
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("🗑️ Historial de Archivos en Servidor")
+            
+            os.makedirs(DATA_DIR, exist_ok=True)
+            try:
+                archivos_guardados = [f for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
+            except Exception:
+                archivos_guardados = []
+            
+            if archivos_guardados:
+                st.sidebar.write("Archivos de meses disponibles:")
+                for arch in archivos_guardados:
+                    col_name, col_del = st.sidebar.columns([3, 1])
+                    col_name.text(arch)
+                    if col_del.button("❌", key=f"del_{arch}", help=f"Eliminar {arch}"):
+                        ruta_a_borrar = os.path.join(DATA_DIR, arch)
+                        try:
+                            os.remove(ruta_a_borrar)
+                            st.session_state.mensaje_exito = f"🗑️ Archivo eliminado: {arch}"
+                            st.rerun()
+                        except Exception as e:
+                            st.sidebar.error(f"No se pudo borrar: {e}")
+            else:
+                st.sidebar.info("No hay archivos CSV en la carpeta data.")
+
+            # ==========================================
+            # SINCRONIZACIÓN AUTOMÁTICA ODOO
             # ==========================================
             st.sidebar.markdown("---")
             st.sidebar.header("🔄 Sincronización Automática Odoo")
@@ -153,41 +181,14 @@ def main():
                                 ruta_archivo = os.path.join(DATA_DIR, f'{mes_destino_odoo}.csv')
                                 df_odoo.to_csv(ruta_archivo, index=False)
                                 
-                                st.session_state.mensaje_exito = f"✅ ¡Sincronización completada! Se guardaron {len(df_odoo)} registros para '{mes_destino_odoo}' en {DATA_DIR}."
+                                # Alerta confirmada de sincronización en disco persistente
+                                st.session_state.mensaje_exito = f"✅ ¡Sincronización completa con Odoo! Se guardaron {len(df_odoo)} registros en {DATA_DIR}."
                                 st.rerun()
                             else:
                                 st.sidebar.warning("Las facturas encontradas no contienen líneas detalladas.")
                                 
                     except Exception as e:
                         st.sidebar.error(f"Error en la conexión con Odoo: {e}")
-
-            # ==========================================
-            # GESTIÓN Y ELIMINACIÓN DE HISTORIAL EXISTENTE
-            # ==========================================
-            st.sidebar.markdown("---")
-            st.sidebar.subheader("🗑️ Historial de Archivos en Servidor")
-            
-            os.makedirs(DATA_DIR, exist_ok=True)
-            try:
-                archivos_guardados = [f for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
-            except Exception:
-                archivos_guardados = []
-            
-            if archivos_guardados:
-                st.sidebar.write("Archivos de meses disponibles:")
-                for arch in archivos_guardados:
-                    col_name, col_del = st.sidebar.columns([3, 1])
-                    col_name.text(arch)
-                    if col_del.button("❌", key=f"del_{arch}", help=f"Eliminar {arch}"):
-                        ruta_a_borrar = os.path.join(DATA_DIR, arch)
-                        try:
-                            os.remove(ruta_a_borrar)
-                            st.session_state.mensaje_exito = f"🗑️ Archivo eliminado: {arch}"
-                            st.rerun()
-                        except Exception as e:
-                            st.sidebar.error(f"No se pudo borrar: {e}")
-            else:
-                st.sidebar.info("No hay archivos CSV en la carpeta de datos.")
     else:
         # --- ENCABEZADO CON LOGOTIPO PRINCIPAL ---
         col_logo, col_title = st.columns([1, 5])
@@ -200,7 +201,7 @@ def main():
         
         st.divider()
 
-        # Alerta de confirmación visual para evitar clics repetitivos
+        # Muestra la alerta de éxito en pantalla para evitar clics repetitivos
         if st.session_state.mensaje_exito:
             st.success(st.session_state.mensaje_exito)
 
